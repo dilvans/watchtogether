@@ -1,28 +1,39 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 const IDLE_MS = 3000;
-const STORAGE_KEY = 'watchtogether-cinema-mode';
+const CINEMA_KEY = 'watchtogether-cinema-mode';
+const EXPANDED_KEY = 'watchtogether-expanded-video';
 
-function readStoredPreference() {
+function readStored(key) {
   try {
-    return localStorage.getItem(STORAGE_KEY) === 'true';
+    return localStorage.getItem(key) === 'true';
   } catch {
     return false;
   }
 }
 
+function writeStored(key, value) {
+  try {
+    localStorage.setItem(key, String(value));
+  } catch {
+    /* ignore storage errors */
+  }
+}
+
 export function useCinemaMode(enabled) {
-  const [cinemaMode, setCinemaMode] = useState(readStoredPreference);
+  const [cinemaMode, setCinemaMode] = useState(() => readStored(CINEMA_KEY));
+  const [expandedVideo, setExpandedVideo] = useState(() => readStored(EXPANDED_KEY));
   const [uiVisible, setUiVisible] = useState(true);
   const idleTimerRef = useRef(null);
 
   const persistCinemaMode = useCallback((value) => {
     setCinemaMode(value);
-    try {
-      localStorage.setItem(STORAGE_KEY, String(value));
-    } catch {
-      /* ignore storage errors */
-    }
+    writeStored(CINEMA_KEY, value);
+  }, []);
+
+  const persistExpandedVideo = useCallback((value) => {
+    setExpandedVideo(value);
+    writeStored(EXPANDED_KEY, value);
   }, []);
 
   const revealUi = useCallback(() => {
@@ -54,6 +65,15 @@ export function useCinemaMode(enabled) {
   }, [enabled, cinemaMode, revealUi]);
 
   const isDimmed = enabled && cinemaMode && !uiVisible;
+  const isExpanded = enabled && expandedVideo;
 
-  return { cinemaMode, setCinemaMode: persistCinemaMode, isDimmed, revealUi };
+  return {
+    cinemaMode,
+    setCinemaMode: persistCinemaMode,
+    expandedVideo,
+    setExpandedVideo: persistExpandedVideo,
+    isDimmed,
+    isExpanded,
+    revealUi,
+  };
 }

@@ -62,7 +62,8 @@ export default function App() {
 
   const syncEnabled = inRoom && partnerHere && !!videoUrl;
   const { bindVideoEvents } = useVideoSync(socket, videoRef, syncEnabled);
-  const { cinemaMode, setCinemaMode, isDimmed } = useCinemaMode(inRoom && !!videoUrl);
+  const { cinemaMode, setCinemaMode, expandedVideo, setExpandedVideo, isDimmed, isExpanded } =
+    useCinemaMode(inRoom && !!videoUrl);
   const {
     trackOptions,
     selectedTrackId,
@@ -191,19 +192,18 @@ export default function App() {
     };
   }, []);
 
+  const chromeHidden =
+    'transition-all duration-500 ease-out overflow-hidden';
+  const chromeDimmedClass = isDimmed
+    ? `${chromeHidden} max-h-0 opacity-0 pointer-events-none`
+    : `${chromeHidden} max-h-[2000px] opacity-100`;
+
+  const showCameras = webcamActive && cameraOn;
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      {isDimmed && (
-        <div
-          className="pointer-events-none fixed inset-0 z-10 bg-black/90 transition-opacity duration-500"
-          aria-hidden
-        />
-      )}
-
       <header
-        className={`relative border-b border-zinc-800/80 bg-zinc-900/50 backdrop-blur transition-opacity duration-500 ${
-          isDimmed ? 'z-0 opacity-0' : 'z-20 opacity-100'
-        }`}
+        className={`relative border-b border-zinc-800/80 bg-zinc-900/50 backdrop-blur ${chromeDimmedClass}`}
       >
         <div className="mx-auto max-w-4xl px-4 py-6 text-center">
           <h1 className="text-2xl font-semibold tracking-tight text-white">
@@ -226,9 +226,7 @@ export default function App() {
       </header>
 
       <main
-        className={`relative mx-auto max-w-4xl px-4 py-8 transition-opacity duration-500 ${
-          isDimmed ? 'z-0' : 'z-20'
-        }`}
+        className={`relative mx-auto px-4 py-8 ${isExpanded ? 'max-w-none' : 'max-w-4xl'}`}
       >
         {!inRoom ? (
           <section className="mx-auto max-w-md space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-8 shadow-xl">
@@ -283,17 +281,13 @@ export default function App() {
         ) : (
           <section className="space-y-6">
             {inRoom && !partnerHere && (
-              <p className="text-center text-sm text-zinc-400">
+              <p className={`text-center text-sm text-zinc-400 ${chromeDimmedClass}`}>
                 Share room code <strong className="text-white">{roomCode}</strong> with
                 your partner. Sync starts when they join.
               </p>
             )}
 
-            <div
-              className={`flex flex-col items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 transition-opacity duration-500 ${
-                isDimmed ? 'pointer-events-none opacity-0' : 'opacity-100'
-              }`}
-            >
+            <div className={`flex flex-col items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 ${chromeDimmedClass}`}>
               <label className="flex w-full max-w-md cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-zinc-600 px-6 py-8 transition hover:border-violet-500/50 hover:bg-zinc-800/30">
                 <span className="text-sm font-medium text-zinc-300">
                   Choose local video file
@@ -314,11 +308,7 @@ export default function App() {
             </div>
 
             {videoUrl && (
-              <div
-                className={`rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 transition-opacity duration-500 ${
-                  isDimmed ? 'pointer-events-none opacity-0' : 'opacity-100'
-                }`}
-              >
+              <div className={`rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 ${chromeDimmedClass}`}>
                 <p className="mb-3 text-sm font-medium text-zinc-300">Viewing options</p>
                 <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
                   <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-300">
@@ -328,7 +318,17 @@ export default function App() {
                       onChange={(e) => setCinemaMode(e.target.checked)}
                       className="size-4 rounded border-zinc-600 bg-zinc-950 text-violet-600 focus:ring-violet-500/50"
                     />
-                    Dim UI when idle
+                    Hide controls when idle
+                  </label>
+
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-300">
+                    <input
+                      type="checkbox"
+                      checked={expandedVideo}
+                      onChange={(e) => setExpandedVideo(e.target.checked)}
+                      className="size-4 rounded border-zinc-600 bg-zinc-950 text-violet-600 focus:ring-violet-500/50"
+                    />
+                    Expand video to fill screen
                   </label>
 
                   <div className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-xs">
@@ -376,14 +376,32 @@ export default function App() {
               </div>
             )}
 
-            <div className="relative z-20 flex flex-col items-center justify-center gap-4 lg:flex-row lg:items-start">
-              <div className="w-full min-w-0 flex-1 lg:max-w-3xl">
+            <div
+              className={
+                isExpanded && isDimmed
+                  ? 'fixed inset-0 z-40 flex flex-col items-stretch justify-center gap-3 bg-zinc-950 p-3 sm:flex-row sm:items-center sm:gap-4 sm:p-4'
+                  : isExpanded
+                    ? 'relative z-30 flex min-h-[min(85vh,calc(100vh-10rem))] flex-col items-center justify-center gap-4 sm:flex-row sm:items-center'
+                    : 'relative z-30 flex flex-col items-center justify-center gap-4 lg:flex-row lg:items-start'
+              }
+            >
+              <div
+                className={
+                  isExpanded
+                    ? 'flex min-h-0 min-w-0 flex-1 items-center justify-center'
+                    : 'w-full min-w-0 flex-1 lg:max-w-3xl'
+                }
+              >
                 {videoUrl ? (
                   <video
                     ref={videoRef}
                     src={videoUrl}
                     controls
-                    className="w-full rounded-xl border border-zinc-800 bg-black shadow-2xl"
+                    className={
+                      isExpanded
+                        ? 'max-h-[min(85vh,calc(100vh-10rem))] w-full max-w-full rounded-xl border border-zinc-800 bg-black object-contain shadow-2xl sm:max-h-[min(80vh,calc(100vh-8rem))]'
+                        : 'w-full rounded-xl border border-zinc-800 bg-black shadow-2xl'
+                    }
                   >
                     {externalTrack && (
                       <track
@@ -402,8 +420,14 @@ export default function App() {
                 )}
               </div>
 
-              {webcamActive && cameraOn && (
-                <div className="flex w-full shrink-0 flex-row gap-3 lg:w-44 lg:flex-col">
+              {showCameras && (
+                <div
+                  className={
+                    isExpanded
+                      ? 'flex shrink-0 flex-row gap-2 sm:w-40 sm:flex-col sm:gap-3'
+                      : 'flex w-full shrink-0 flex-row gap-3 lg:w-44 lg:flex-col'
+                  }
+                >
                   <WebcamTile stream={localStream} label="You" />
                   <WebcamTile
                     stream={remoteStream}
@@ -418,11 +442,7 @@ export default function App() {
             </div>
 
             {partnerHere && (
-              <div
-                className={`flex flex-col items-center gap-2 transition-opacity duration-500 ${
-                  isDimmed ? 'pointer-events-none opacity-0' : 'opacity-100'
-                }`}
-              >
+              <div className={`flex flex-col items-center gap-2 ${chromeDimmedClass}`}>
                 <div className="flex flex-wrap items-center justify-center gap-3">
                   <button
                     type="button"
@@ -456,22 +476,13 @@ export default function App() {
             )}
 
             {webcamError && (
-              <p
-                className={`text-center text-sm text-red-400 transition-opacity duration-500 ${
-                  isDimmed ? 'opacity-0' : 'opacity-100'
-                }`}
-                role="alert"
-              >
+              <p className={`text-center text-sm text-red-400 ${chromeDimmedClass}`} role="alert">
                 {webcamError}
               </p>
             )}
 
             {videoUrl && !partnerHere && (
-              <p
-                className={`text-center text-xs text-zinc-500 transition-opacity duration-500 ${
-                  isDimmed ? 'opacity-0' : 'opacity-100'
-                }`}
-              >
+              <p className={`text-center text-xs text-zinc-500 ${chromeDimmedClass}`}>
                 Playback controls will sync once your partner joins
               </p>
             )}
