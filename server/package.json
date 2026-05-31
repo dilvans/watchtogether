@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "node --watch index.js",
     "build": "npm install --prefix ../client --include=dev && npm run build --prefix ../client",
+    "prestart": "node ensure-client-build.mjs",
     "start": "node index.js"
   },
   "dependencies": {
