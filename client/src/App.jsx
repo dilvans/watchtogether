@@ -60,7 +60,7 @@ export default function App() {
   const syncEnabled = inRoom && partnerHere && !!videoUrl;
   const { bindVideoEvents } = useVideoSync(socket, videoRef, syncEnabled);
   const webcamActive = inRoom && partnerHere;
-  const { localStream, remoteStream, error: webcamError } = useWebRTC(socket, {
+  const { localStream, remoteStream, error: webcamError, connectionState } = useWebRTC(socket, {
     active: webcamActive,
     cameraOn,
     micOn,
@@ -276,8 +276,8 @@ export default function App() {
               )}
             </div>
 
-            <div className="flex justify-center">
-              <div className="relative w-full max-w-3xl">
+            <div className="flex flex-col items-center justify-center gap-4 lg:flex-row lg:items-start">
+              <div className="w-full min-w-0 flex-1 lg:max-w-3xl">
                 {videoUrl ? (
                   <video
                     ref={videoRef}
@@ -290,22 +290,18 @@ export default function App() {
                     Select a video to begin
                   </div>
                 )}
-
-                {webcamActive && cameraOn && (
-                  <>
-                    <WebcamTile
-                      stream={localStream}
-                      label="You"
-                      className="bottom-3 left-3"
-                    />
-                    <WebcamTile
-                      stream={remoteStream}
-                      label="Partner"
-                      className="bottom-3 right-3"
-                    />
-                  </>
-                )}
               </div>
+
+              {webcamActive && cameraOn && (
+                <div className="flex w-full shrink-0 flex-row gap-3 lg:w-44 lg:flex-col">
+                  <WebcamTile stream={localStream} label="You" />
+                  <WebcamTile
+                    stream={remoteStream}
+                    label="Partner"
+                    waiting={connectionState === 'connecting' || connectionState === 'new'}
+                  />
+                </div>
+              )}
             </div>
 
             {partnerHere && (

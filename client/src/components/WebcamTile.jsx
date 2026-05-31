@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-export default function WebcamTile({ stream, label, className = '' }) {
+export default function WebcamTile({ stream, label, waiting = false }) {
   const videoRef = useRef(null);
 
   useEffect(() => {
@@ -10,9 +10,7 @@ export default function WebcamTile({ stream, label, className = '' }) {
   }, [stream]);
 
   return (
-    <div
-      className={`pointer-events-none absolute z-10 w-28 overflow-hidden rounded-lg border-2 border-zinc-700/80 bg-zinc-900 shadow-lg sm:w-36 ${className}`}
-    >
+    <div className="w-full overflow-hidden rounded-xl border border-zinc-700/80 bg-zinc-900 shadow-lg">
       {stream ? (
         <video
           ref={videoRef}
@@ -23,10 +21,10 @@ export default function WebcamTile({ stream, label, className = '' }) {
         />
       ) : (
         <div className="flex aspect-video w-full items-center justify-center bg-zinc-800 text-xs text-zinc-500">
-          …
+          {waiting ? 'Connecting…' : 'No video'}
         </div>
       )}
-      <span className="absolute bottom-0 left-0 right-0 bg-black/60 px-1.5 py-0.5 text-center text-[10px] font-medium text-zinc-200">
+      <span className="block bg-black/60 px-2 py-1 text-center text-xs font-medium text-zinc-200">
         {label}
       </span>
     </div>
