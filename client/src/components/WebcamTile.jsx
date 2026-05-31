@@ -7,6 +7,9 @@ export default function WebcamTile({ stream, label, waiting = false }) {
     const video = videoRef.current;
     if (!video) return;
     video.srcObject = stream ?? null;
+    if (stream) {
+      video.play().catch(() => {});
+    }
   }, [stream]);
 
   return (
@@ -21,7 +24,7 @@ export default function WebcamTile({ stream, label, waiting = false }) {
         />
       ) : (
         <div className="flex aspect-video w-full items-center justify-center bg-zinc-800 text-xs text-zinc-500">
-          {waiting ? 'Connecting…' : 'No video'}
+          {waiting ? 'Connecting…' : 'Waiting for partner camera'}
         </div>
       )}
       <span className="block bg-black/60 px-2 py-1 text-center text-xs font-medium text-zinc-200">

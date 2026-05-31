@@ -74,7 +74,7 @@ io.on('connection', (socket) => {
     rooms.set(code, { host: socket.id, users: [socket.id] });
     socket.join(code);
     socket.data.roomCode = code;
-    callback({ ok: true, code });
+    callback({ ok: true, code, partnerId: null });
   });
 
   socket.on('join-room', (code, callback) => {
@@ -94,9 +94,9 @@ io.on('connection', (socket) => {
     room.users.push(socket.id);
     socket.join(normalized);
     socket.data.roomCode = normalized;
-    callback({ ok: true, code: normalized });
+    callback({ ok: true, code: normalized, partnerId: room.host });
 
-    io.to(normalized).emit('partner-joined');
+    socket.to(normalized).emit('partner-joined', { partnerId: socket.id });
   });
 
   socket.on('sync-play', (payload) => {

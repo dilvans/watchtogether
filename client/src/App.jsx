@@ -48,6 +48,7 @@ export default function App() {
   const [error, setError] = useState('');
   const [inRoom, setInRoom] = useState(false);
   const [isHost, setIsHost] = useState(false);
+  const [partnerId, setPartnerId] = useState(null);
   const [partnerHere, setPartnerHere] = useState(false);
   const [cameraOn, setCameraOn] = useState(false);
   const [micOn, setMicOn] = useState(false);
@@ -64,7 +65,7 @@ export default function App() {
     active: webcamActive,
     cameraOn,
     micOn,
-    isHost,
+    partnerId,
   });
 
   useEffect(() => {
@@ -89,12 +90,14 @@ export default function App() {
   useEffect(() => {
     if (!socket || !inRoom) return;
 
-    const onPartnerJoined = () => {
+    const onPartnerJoined = ({ partnerId: id }) => {
+      setPartnerId(id);
       setPartnerHere(true);
       setConnectionStatus(STATUS.CONNECTED);
     };
 
     const onPartnerLeft = () => {
+      setPartnerId(null);
       setPartnerHere(false);
       setConnectionStatus(STATUS.WAITING);
       setCameraOn(false);
@@ -126,6 +129,7 @@ export default function App() {
       setRoomCode(res.code);
       setInRoom(true);
       setIsHost(true);
+      setPartnerId(null);
       setPartnerHere(false);
       setConnectionStatus(STATUS.WAITING);
     });
@@ -146,6 +150,7 @@ export default function App() {
       setRoomCode(res.code);
       setInRoom(true);
       setIsHost(false);
+      setPartnerId(res.partnerId ?? null);
       setPartnerHere(true);
       setConnectionStatus(STATUS.CONNECTED);
     });
@@ -305,31 +310,36 @@ export default function App() {
             </div>
 
             {partnerHere && (
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setCameraOn((on) => !on)}
-                  className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-                    cameraOn
-                      ? 'bg-violet-600 text-white hover:bg-violet-500'
-                      : 'border border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700'
-                  }`}
-                >
-                  {cameraOn ? 'Camera on' : 'Enable camera'}
-                </button>
-                {cameraOn && (
+              <div className="flex flex-col items-center gap-2">
+                <div className="flex flex-wrap items-center justify-center gap-3">
                   <button
                     type="button"
-                    onClick={() => setMicOn((on) => !on)}
+                    onClick={() => setCameraOn((on) => !on)}
                     className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-                      micOn
-                        ? 'border border-emerald-600/50 bg-emerald-600/20 text-emerald-300'
-                        : 'border border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                      cameraOn
+                        ? 'bg-violet-600 text-white hover:bg-violet-500'
+                        : 'border border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700'
                     }`}
                   >
-                    {micOn ? 'Mic on' : 'Mic off'}
+                    {cameraOn ? 'Camera on' : 'Enable camera'}
                   </button>
-                )}
+                  {cameraOn && (
+                    <button
+                      type="button"
+                      onClick={() => setMicOn((on) => !on)}
+                      className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                        micOn
+                          ? 'border border-emerald-600/50 bg-emerald-600/20 text-emerald-300'
+                          : 'border border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                      }`}
+                    >
+                      {micOn ? 'Mic on' : 'Mic off'}
+                    </button>
+                  )}
+                </div>
+                <p className="text-center text-xs text-zinc-500">
+                  Both people must click Enable camera to see each other.
+                </p>
               </div>
             )}
 
