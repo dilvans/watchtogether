@@ -3,28 +3,36 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import path from 'path';
+import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 
 const PORT = process.env.PORT || 3000;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientDist = path.join(__dirname, '../client/dist');
+const hasClientBuild = existsSync(path.join(clientDist, 'index.html'));
 
 const app = express();
 app.use(cors({ origin: '*' }));
 app.get('/health', (_req, res) => {
-  res.json({ ok: true });
+  res.json({ ok: true, clientBuild: hasClientBuild });
 });
 
-app.use(express.static(clientDist));
-app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/socket.io')) {
-    next();
-    return;
-  }
-  res.sendFile(path.join(clientDist, 'index.html'), (err) => {
-    if (err) next(err);
+if (hasClientBuild) {
+  app.use(express.static(clientDist));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/socket.io')) {
+      next();
+      return;
+    }
+    res.sendFile(path.join(clientDist, 'index.html'), (err) => {
+      if (err) next(err);
+    });
   });
-});
+} else {
+  app.get('/', (_req, res) => {
+    res.status(503).send('Frontend build missing. Run npm run build in the server directory.');
+  });
+}
 
 const httpServer = createServer(app);
 
@@ -128,4 +136,7 @@ io.on('connection', (socket) => {
 
 httpServer.listen(PORT, () => {
   console.log(`WatchTogether server listening on port ${PORT}`);
+  if (!hasClientBuild) {
+    console.warn('Client build not found at', clientDist);
+  }
 });
