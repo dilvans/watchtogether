@@ -2,13 +2,28 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const PORT = process.env.PORT || 3000;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const clientDist = path.join(__dirname, '../client/dist');
 
 const app = express();
 app.use(cors({ origin: '*' }));
 app.get('/health', (_req, res) => {
   res.json({ ok: true });
+});
+
+app.use(express.static(clientDist));
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/socket.io')) {
+    next();
+    return;
+  }
+  res.sendFile(path.join(clientDist, 'index.html'), (err) => {
+    if (err) next(err);
+  });
 });
 
 const httpServer = createServer(app);
