@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { createSocket, BACKEND_URL } from './lib/socket.js';
 import { useVideoSync } from './hooks/useVideoSync.js';
 import { useWebRTC } from './hooks/useWebRTC.js';
+import { useCinemaMode } from './hooks/useCinemaMode.js';
+import { useSubtitles } from './hooks/useSubtitles.js';
 import WebcamTile from './components/WebcamTile.jsx';
 
 const STATUS = {
@@ -60,6 +62,17 @@ export default function App() {
 
   const syncEnabled = inRoom && partnerHere && !!videoUrl;
   const { bindVideoEvents } = useVideoSync(socket, videoRef, syncEnabled);
+  const { cinemaMode, setCinemaMode, isDimmed } = useCinemaMode(inRoom && !!videoUrl);
+  const {
+    trackOptions,
+    selectedTrackId,
+    setSelectedTrackId,
+    externalTrack,
+    subtitleError,
+    handleExternalSubtitle,
+    handleExternalTrackAdded,
+    hasEmbeddedTracks,
+  } = useSubtitles(videoRef, videoUrl);
   const webcamActive = inRoom && partnerHere;
   const { localStream, remoteStream, error: webcamError, connectionState } = useWebRTC(socket, {
     active: webcamActive,
@@ -180,7 +193,18 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      <header className="border-b border-zinc-800/80 bg-zinc-900/50 backdrop-blur">
+      {isDimmed && (
+        <div
+          className="pointer-events-none fixed inset-0 z-10 bg-black/90 transition-opacity duration-500"
+          aria-hidden
+        />
+      )}
+
+      <header
+        className={`relative border-b border-zinc-800/80 bg-zinc-900/50 backdrop-blur transition-opacity duration-500 ${
+          isDimmed ? 'z-0 opacity-0' : 'z-20 opacity-100'
+        }`}
+      >
         <div className="mx-auto max-w-4xl px-4 py-6 text-center">
           <h1 className="text-2xl font-semibold tracking-tight text-white">
             WatchTogether
@@ -201,7 +225,11 @@ export default function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-4xl px-4 py-8">
+      <main
+        className={`relative mx-auto max-w-4xl px-4 py-8 transition-opacity duration-500 ${
+          isDimmed ? 'z-0' : 'z-20'
+        }`}
+      >
         {!inRoom ? (
           <section className="mx-auto max-w-md space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-8 shadow-xl">
             <div>
@@ -261,7 +289,11 @@ export default function App() {
               </p>
             )}
 
-            <div className="flex flex-col items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6">
+            <div
+              className={`flex flex-col items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 transition-opacity duration-500 ${
+                isDimmed ? 'pointer-events-none opacity-0' : 'opacity-100'
+              }`}
+            >
               <label className="flex w-full max-w-md cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-zinc-600 px-6 py-8 transition hover:border-violet-500/50 hover:bg-zinc-800/30">
                 <span className="text-sm font-medium text-zinc-300">
                   Choose local video file
@@ -281,7 +313,70 @@ export default function App() {
               )}
             </div>
 
-            <div className="flex flex-col items-center justify-center gap-4 lg:flex-row lg:items-start">
+            {videoUrl && (
+              <div
+                className={`rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 transition-opacity duration-500 ${
+                  isDimmed ? 'pointer-events-none opacity-0' : 'opacity-100'
+                }`}
+              >
+                <p className="mb-3 text-sm font-medium text-zinc-300">Viewing options</p>
+                <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-300">
+                    <input
+                      type="checkbox"
+                      checked={cinemaMode}
+                      onChange={(e) => setCinemaMode(e.target.checked)}
+                      className="size-4 rounded border-zinc-600 bg-zinc-950 text-violet-600 focus:ring-violet-500/50"
+                    />
+                    Dim UI when idle
+                  </label>
+
+                  <div className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-xs">
+                    <label htmlFor="subtitle-track" className="text-xs text-zinc-500">
+                      Subtitles
+                    </label>
+                    <select
+                      id="subtitle-track"
+                      value={selectedTrackId}
+                      onChange={(e) => setSelectedTrackId(e.target.value)}
+                      disabled={trackOptions.length <= 1}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none ring-violet-500/50 focus:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {trackOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <label className="cursor-pointer rounded-lg border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm text-zinc-200 transition hover:bg-zinc-700">
+                    Load subtitle file
+                    <input
+                      type="file"
+                      accept=".srt,.vtt,text/vtt,application/x-subrip"
+                      onChange={(e) => {
+                        handleExternalSubtitle(e.target.files?.[0]);
+                        e.target.value = '';
+                      }}
+                      className="sr-only"
+                    />
+                  </label>
+                </div>
+                <p className="mt-2 text-xs text-zinc-500">
+                  {hasEmbeddedTracks
+                    ? 'Embedded tracks were found in your video file.'
+                    : 'Load a matching .srt or .vtt file, or use embedded tracks if your browser exposes them.'}
+                </p>
+                {subtitleError && (
+                  <p className="mt-2 text-sm text-red-400" role="alert">
+                    {subtitleError}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="relative z-20 flex flex-col items-center justify-center gap-4 lg:flex-row lg:items-start">
               <div className="w-full min-w-0 flex-1 lg:max-w-3xl">
                 {videoUrl ? (
                   <video
@@ -289,7 +384,17 @@ export default function App() {
                     src={videoUrl}
                     controls
                     className="w-full rounded-xl border border-zinc-800 bg-black shadow-2xl"
-                  />
+                  >
+                    {externalTrack && (
+                      <track
+                        kind="subtitles"
+                        src={externalTrack.src}
+                        label={externalTrack.label}
+                        default
+                        onLoad={handleExternalTrackAdded}
+                      />
+                    )}
+                  </video>
                 ) : (
                   <div className="flex aspect-video w-full items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/80 text-zinc-500">
                     Select a video to begin
@@ -303,14 +408,21 @@ export default function App() {
                   <WebcamTile
                     stream={remoteStream}
                     label="Partner"
-                    waiting={connectionState === 'connecting' || connectionState === 'new'}
+                    waiting={
+                      !remoteStream &&
+                      (connectionState === 'connecting' || connectionState === 'new')
+                    }
                   />
                 </div>
               )}
             </div>
 
             {partnerHere && (
-              <div className="flex flex-col items-center gap-2">
+              <div
+                className={`flex flex-col items-center gap-2 transition-opacity duration-500 ${
+                  isDimmed ? 'pointer-events-none opacity-0' : 'opacity-100'
+                }`}
+              >
                 <div className="flex flex-wrap items-center justify-center gap-3">
                   <button
                     type="button"
@@ -344,13 +456,22 @@ export default function App() {
             )}
 
             {webcamError && (
-              <p className="text-center text-sm text-red-400" role="alert">
+              <p
+                className={`text-center text-sm text-red-400 transition-opacity duration-500 ${
+                  isDimmed ? 'opacity-0' : 'opacity-100'
+                }`}
+                role="alert"
+              >
                 {webcamError}
               </p>
             )}
 
             {videoUrl && !partnerHere && (
-              <p className="text-center text-xs text-zinc-500">
+              <p
+                className={`text-center text-xs text-zinc-500 transition-opacity duration-500 ${
+                  isDimmed ? 'opacity-0' : 'opacity-100'
+                }`}
+              >
                 Playback controls will sync once your partner joins
               </p>
             )}

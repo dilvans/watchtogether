@@ -49,20 +49,14 @@ export function useWebRTC(socket, { active, cameraOn, micOn, partnerId }) {
   const socketIdRef = useRef(socket?.id ?? null);
 
   partnerIdRef.current = partnerId;
-  socketIdRef.current = socket?.id ?? socketIdRef.current;
+  if (socket?.id) socketIdRef.current = socket.id;
 
-  useEffect(() => {
-    if (socket?.id) {
-      socketIdRef.current = socket.id;
-    }
-  }, [socket?.id]);
-
-  const isOfferer = useCallback(() => {
+  const isOfferer = () => {
     const partner = partnerIdRef.current;
     const selfId = socketIdRef.current;
     if (!partner || !selfId) return false;
     return selfId.localeCompare(partner) < 0;
-  }, []);
+  };
 
   const cleanupPeerConnection = useCallback(() => {
     if (pcRef.current) {
@@ -83,15 +77,29 @@ export function useWebRTC(socket, { active, cameraOn, micOn, partnerId }) {
     setLocalStream(null);
   }, []);
 
-  const ensureRemoteStream = useCallback(() => {
+  const addRemoteTrack = (track) => {
     if (!remoteStreamRef.current) {
       remoteStreamRef.current = new MediaStream();
       setRemoteStream(remoteStreamRef.current);
     }
-    return remoteStreamRef.current;
-  }, []);
+    const stream = remoteStreamRef.current;
+    if (!stream.getTracks().some((t) => t.id === track.id)) {
+      stream.addTrack(track);
+    }
+  };
 
-  const buildPeerConnection = useCallback(() => {
+  const attachLocalTracks = (pc, stream) => {
+    stream.getTracks().forEach((track) => {
+      const sender = pc.getSenders().find((s) => s.track?.kind === track.kind);
+      if (sender) {
+        sender.replaceTrack(track);
+      } else {
+        pc.addTrack(track, stream);
+      }
+    });
+  };
+
+  const buildPeerConnection = () => {
     const pc = new RTCPeerConnection(ICE_SERVERS);
 
     pc.onicecandidate = (event) => {
@@ -101,11 +109,7 @@ export function useWebRTC(socket, { active, cameraOn, micOn, partnerId }) {
     };
 
     pc.ontrack = (event) => {
-      const stream = ensureRemoteStream();
-      if (event.track && !stream.getTracks().some((t) => t.id === event.track.id)) {
-        stream.addTrack(event.track);
-        setRemoteStream(new MediaStream(stream.getTracks()));
-      }
+      if (event.track) addRemoteTrack(event.track);
     };
 
     pc.onconnectionstatechange = () => {
@@ -116,25 +120,19 @@ export function useWebRTC(socket, { active, cameraOn, micOn, partnerId }) {
     };
 
     return pc;
-  }, [socket, cleanupPeerConnection, ensureRemoteStream]);
+  };
 
-  const attachLocalTracks = useCallback((pc, stream) => {
-    stream.getTracks().forEach((track) => {
-      const sender = pc.getSenders().find((s) => s.track?.kind === track.kind);
-      if (sender) {
-        sender.replaceTrack(track);
-      } else {
-        pc.addTrack(track, stream);
-      }
-    });
-  }, []);
-
-  const sendOffer = useCallback(async () => {
+  const sendOffer = async () => {
     if (!socket?.connected || !localStreamRef.current || !isOfferer()) return;
     if (negotiatingRef.current) return;
 
     const existing = pcRef.current;
-    if (existing && (existing.connectionState === 'connected' || existing.connectionState === 'connecting')) {
+    if (
+      existing &&
+      existing.localDescription &&
+      existing.connectionState !== 'failed' &&
+      existing.connectionState !== 'closed'
+    ) {
       return;
     }
 
@@ -159,49 +157,54 @@ export function useWebRTC(socket, { active, cameraOn, micOn, partnerId }) {
     } finally {
       negotiatingRef.current = false;
     }
-  }, [socket, isOfferer, buildPeerConnection, attachLocalTracks, cleanupPeerConnection]);
+  };
 
-  const answerOffer = useCallback(
-    async (sdp) => {
-      if (isOfferer()) return;
-      if (!localStreamRef.current) {
-        pendingOfferRef.current = sdp;
-        return;
+  const answerOffer = async (sdp) => {
+    if (isOfferer()) return;
+    if (!localStreamRef.current) {
+      pendingOfferRef.current = sdp;
+      return;
+    }
+    if (negotiatingRef.current) return;
+
+    const existing = pcRef.current;
+    if (
+      existing &&
+      existing.remoteDescription &&
+      existing.connectionState !== 'failed' &&
+      existing.connectionState !== 'closed'
+    ) {
+      return;
+    }
+
+    negotiatingRef.current = true;
+    setConnectionState('connecting');
+
+    try {
+      if (existing) {
+        existing.close();
+        pcRef.current = null;
       }
-      if (negotiatingRef.current) return;
 
-      negotiatingRef.current = true;
-      setConnectionState('connecting');
+      const pc = buildPeerConnection();
+      pcRef.current = pc;
+      attachLocalTracks(pc, localStreamRef.current);
 
-      try {
-        if (pcRef.current) {
-          pcRef.current.close();
-          pcRef.current = null;
-        }
+      await pc.setRemoteDescription(sdp);
+      await flushPendingCandidates(pc, pendingCandidatesRef.current);
 
-        const pc = buildPeerConnection();
-        pcRef.current = pc;
-        attachLocalTracks(pc, localStreamRef.current);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit('webrtc-answer', { sdp: serializeDescription(pc.localDescription) });
+    } catch {
+      cleanupPeerConnection();
+    } finally {
+      negotiatingRef.current = false;
+    }
+  };
 
-        await pc.setRemoteDescription(sdp);
-        await flushPendingCandidates(pc, pendingCandidatesRef.current);
-
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        socket.emit('webrtc-answer', { sdp: serializeDescription(pc.localDescription) });
-      } catch {
-        cleanupPeerConnection();
-      } finally {
-        negotiatingRef.current = false;
-      }
-    },
-    [socket, isOfferer, buildPeerConnection, attachLocalTracks, cleanupPeerConnection],
-  );
-
-  const tryConnect = useCallback(() => {
+  const maybeStartConnection = () => {
     if (!active || !cameraOn || !localStreamRef.current || !partnerIdRef.current) return;
-
-    socket?.emit('webrtc-ready');
 
     if (isOfferer()) {
       sendOffer();
@@ -210,7 +213,7 @@ export function useWebRTC(socket, { active, cameraOn, micOn, partnerId }) {
       pendingOfferRef.current = null;
       answerOffer(sdp);
     }
-  }, [active, cameraOn, socket, isOfferer, sendOffer, answerOffer]);
+  };
 
   useEffect(() => {
     if (!cameraOn) {
@@ -219,6 +222,8 @@ export function useWebRTC(socket, { active, cameraOn, micOn, partnerId }) {
       setError(null);
       return undefined;
     }
+
+    if (localStreamRef.current) return undefined;
 
     if (!navigator.mediaDevices?.getUserMedia) {
       setError('Camera is not supported in this browser.');
@@ -264,27 +269,24 @@ export function useWebRTC(socket, { active, cameraOn, micOn, partnerId }) {
   }, [micOn]);
 
   useEffect(() => {
-    if (!active || !cameraOn || !localStream || !partnerId) return undefined;
-    tryConnect();
+    if (!active || !cameraOn || !localStream || !partnerId || !socket?.id) return undefined;
+    maybeStartConnection();
     return undefined;
-  }, [active, cameraOn, localStream, partnerId, tryConnect]);
+  }, [active, cameraOn, localStream, partnerId, socket?.id]);
 
   useEffect(() => {
     if (!socket || !active) return undefined;
 
-    const handleReady = () => {
-      tryConnect();
-    };
-
     const handleOffer = ({ sdp }) => {
       if (isOfferer()) return;
+      if (pcRef.current?.remoteDescription) return;
       answerOffer(sdp);
     };
 
     const handleAnswer = async ({ sdp }) => {
       if (!isOfferer()) return;
       const pc = pcRef.current;
-      if (!pc) return;
+      if (!pc || pc.remoteDescription) return;
 
       try {
         await pc.setRemoteDescription(sdp);
@@ -308,18 +310,16 @@ export function useWebRTC(socket, { active, cameraOn, micOn, partnerId }) {
       }
     };
 
-    socket.on('webrtc-ready', handleReady);
     socket.on('webrtc-offer', handleOffer);
     socket.on('webrtc-answer', handleAnswer);
     socket.on('webrtc-ice-candidate', handleIceCandidate);
 
     return () => {
-      socket.off('webrtc-ready', handleReady);
       socket.off('webrtc-offer', handleOffer);
       socket.off('webrtc-answer', handleAnswer);
       socket.off('webrtc-ice-candidate', handleIceCandidate);
     };
-  }, [socket, active, isOfferer, tryConnect, answerOffer, cleanupPeerConnection]);
+  }, [socket, active, cleanupPeerConnection]);
 
   useEffect(
     () => () => {

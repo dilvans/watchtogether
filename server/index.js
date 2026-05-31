@@ -117,12 +117,6 @@ io.on('connection', (socket) => {
     socket.to(code).emit('sync-seek', payload);
   });
 
-  socket.on('webrtc-ready', () => {
-    const code = socket.data.roomCode;
-    if (!code) return;
-    socket.to(code).emit('webrtc-ready');
-  });
-
   socket.on('webrtc-offer', (payload) => {
     const code = socket.data.roomCode;
     if (!code) return;

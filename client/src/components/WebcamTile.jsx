@@ -2,10 +2,13 @@ import { useEffect, useRef } from 'react';
 
 export default function WebcamTile({ stream, label, waiting = false }) {
   const videoRef = useRef(null);
+  const boundStreamRef = useRef(null);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || stream === boundStreamRef.current) return;
+
+    boundStreamRef.current = stream;
     video.srcObject = stream ?? null;
     if (stream) {
       video.play().catch(() => {});
