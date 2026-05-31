@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createSocket, BACKEND_URL } from './lib/socket.js';
 import { useVideoSync } from './hooks/useVideoSync.js';
+import { useWebRTC } from './hooks/useWebRTC.js';
+import WebcamTile from './components/WebcamTile.jsx';
 
 const STATUS = {
   DISCONNECTED: 'disconnected',
@@ -45,7 +47,10 @@ export default function App() {
   const [joinInput, setJoinInput] = useState('');
   const [error, setError] = useState('');
   const [inRoom, setInRoom] = useState(false);
+  const [isHost, setIsHost] = useState(false);
   const [partnerHere, setPartnerHere] = useState(false);
+  const [cameraOn, setCameraOn] = useState(false);
+  const [micOn, setMicOn] = useState(false);
   const [videoUrl, setVideoUrl] = useState(null);
   const [fileName, setFileName] = useState('');
 
@@ -54,6 +59,13 @@ export default function App() {
 
   const syncEnabled = inRoom && partnerHere && !!videoUrl;
   const { bindVideoEvents } = useVideoSync(socket, videoRef, syncEnabled);
+  const webcamActive = inRoom && partnerHere;
+  const { localStream, remoteStream, error: webcamError } = useWebRTC(socket, {
+    active: webcamActive,
+    cameraOn,
+    micOn,
+    isHost,
+  });
 
   useEffect(() => {
     const s = createSocket();
@@ -85,6 +97,8 @@ export default function App() {
     const onPartnerLeft = () => {
       setPartnerHere(false);
       setConnectionStatus(STATUS.WAITING);
+      setCameraOn(false);
+      setMicOn(false);
     };
 
     socket.on('partner-joined', onPartnerJoined);
@@ -111,6 +125,7 @@ export default function App() {
       }
       setRoomCode(res.code);
       setInRoom(true);
+      setIsHost(true);
       setPartnerHere(false);
       setConnectionStatus(STATUS.WAITING);
     });
@@ -130,6 +145,7 @@ export default function App() {
       }
       setRoomCode(res.code);
       setInRoom(true);
+      setIsHost(false);
       setPartnerHere(true);
       setConnectionStatus(STATUS.CONNECTED);
     });
@@ -261,19 +277,71 @@ export default function App() {
             </div>
 
             <div className="flex justify-center">
-              {videoUrl ? (
-                <video
-                  ref={videoRef}
-                  src={videoUrl}
-                  controls
-                  className="w-full max-w-3xl rounded-xl border border-zinc-800 bg-black shadow-2xl"
-                />
-              ) : (
-                <div className="flex aspect-video w-full max-w-3xl items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/80 text-zinc-500">
-                  Select a video to begin
-                </div>
-              )}
+              <div className="relative w-full max-w-3xl">
+                {videoUrl ? (
+                  <video
+                    ref={videoRef}
+                    src={videoUrl}
+                    controls
+                    className="w-full rounded-xl border border-zinc-800 bg-black shadow-2xl"
+                  />
+                ) : (
+                  <div className="flex aspect-video w-full items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/80 text-zinc-500">
+                    Select a video to begin
+                  </div>
+                )}
+
+                {webcamActive && cameraOn && (
+                  <>
+                    <WebcamTile
+                      stream={localStream}
+                      label="You"
+                      className="bottom-3 left-3"
+                    />
+                    <WebcamTile
+                      stream={remoteStream}
+                      label="Partner"
+                      className="bottom-3 right-3"
+                    />
+                  </>
+                )}
+              </div>
             </div>
+
+            {partnerHere && (
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCameraOn((on) => !on)}
+                  className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                    cameraOn
+                      ? 'bg-violet-600 text-white hover:bg-violet-500'
+                      : 'border border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700'
+                  }`}
+                >
+                  {cameraOn ? 'Camera on' : 'Enable camera'}
+                </button>
+                {cameraOn && (
+                  <button
+                    type="button"
+                    onClick={() => setMicOn((on) => !on)}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                      micOn
+                        ? 'border border-emerald-600/50 bg-emerald-600/20 text-emerald-300'
+                        : 'border border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                    }`}
+                  >
+                    {micOn ? 'Mic on' : 'Mic off'}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {webcamError && (
+              <p className="text-center text-sm text-red-400" role="alert">
+                {webcamError}
+              </p>
+            )}
 
             {videoUrl && !partnerHere && (
               <p className="text-center text-xs text-zinc-500">

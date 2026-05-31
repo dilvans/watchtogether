@@ -117,6 +117,24 @@ io.on('connection', (socket) => {
     socket.to(code).emit('sync-seek', payload);
   });
 
+  socket.on('webrtc-offer', (payload) => {
+    const code = socket.data.roomCode;
+    if (!code) return;
+    socket.to(code).emit('webrtc-offer', payload);
+  });
+
+  socket.on('webrtc-answer', (payload) => {
+    const code = socket.data.roomCode;
+    if (!code) return;
+    socket.to(code).emit('webrtc-answer', payload);
+  });
+
+  socket.on('webrtc-ice-candidate', (payload) => {
+    const code = socket.data.roomCode;
+    if (!code) return;
+    socket.to(code).emit('webrtc-ice-candidate', payload);
+  });
+
   socket.on('disconnect', () => {
     const code = socket.data.roomCode;
     if (!code) return;
