@@ -5,6 +5,7 @@ import cors from 'cors';
 import path from 'path';
 import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
+import { getTurnIceServers } from './turnCredentials.js';
 
 const PORT = process.env.PORT || 3000;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -14,13 +15,27 @@ const hasClientBuild = existsSync(path.join(clientDist, 'index.html'));
 const app = express();
 app.use(cors({ origin: '*' }));
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, clientBuild: hasClientBuild });
+  res.json({
+    ok: true,
+    clientBuild: hasClientBuild,
+    turnConfigured: Boolean(process.env.METERED_DOMAIN && process.env.METERED_SECRET_KEY),
+  });
+});
+
+app.get('/api/turn-credentials', async (_req, res) => {
+  try {
+    const config = await getTurnIceServers();
+    res.json(config);
+  } catch (err) {
+    console.error('TURN credential error:', err.message);
+    res.status(500).json({ error: 'Could not fetch TURN credentials' });
+  }
 });
 
 if (hasClientBuild) {
   app.use(express.static(clientDist));
   app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/socket.io')) {
+    if (req.path.startsWith('/socket.io') || req.path.startsWith('/api/')) {
       next();
       return;
     }

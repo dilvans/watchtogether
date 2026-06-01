@@ -1,20 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-
-const ICE_SERVERS = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    {
-      urls: [
-        'turn:openrelay.metered.ca:80',
-        'turn:openrelay.metered.ca:443',
-        'turn:openrelay.metered.ca:443?transport=tcp',
-      ],
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
-  ],
-};
+import { fetchIceServers } from '../lib/iceServers.js';
 
 function serializeDescription(desc) {
   if (!desc) return null;
@@ -47,6 +32,8 @@ export function useWebRTC(socket, { active, cameraOn, micOn, partnerId }) {
   const negotiatingRef = useRef(false);
   const partnerIdRef = useRef(partnerId);
   const socketIdRef = useRef(socket?.id ?? null);
+  const iceConfigRef = useRef(null);
+  const [iceReady, setIceReady] = useState(false);
 
   partnerIdRef.current = partnerId;
   if (socket?.id) socketIdRef.current = socket.id;
@@ -100,7 +87,8 @@ export function useWebRTC(socket, { active, cameraOn, micOn, partnerId }) {
   };
 
   const buildPeerConnection = () => {
-    const pc = new RTCPeerConnection(ICE_SERVERS);
+    const iceServers = iceConfigRef.current?.iceServers ?? [{ urls: 'stun:stun.l.google.com:19302' }];
+    const pc = new RTCPeerConnection({ iceServers });
 
     pc.onicecandidate = (event) => {
       if (event.candidate && socket?.connected) {
@@ -216,6 +204,26 @@ export function useWebRTC(socket, { active, cameraOn, micOn, partnerId }) {
   };
 
   useEffect(() => {
+    if (!active) {
+      iceConfigRef.current = null;
+      setIceReady(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    fetchIceServers().then((config) => {
+      if (cancelled) return;
+      iceConfigRef.current = config;
+      setIceReady(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [active]);
+
+  useEffect(() => {
     if (!cameraOn) {
       stopLocalMedia();
       cleanupPeerConnection();
@@ -269,10 +277,12 @@ export function useWebRTC(socket, { active, cameraOn, micOn, partnerId }) {
   }, [micOn]);
 
   useEffect(() => {
-    if (!active || !cameraOn || !localStream || !partnerId || !socket?.id) return undefined;
+    if (!active || !cameraOn || !localStream || !partnerId || !socket?.id || !iceReady) {
+      return undefined;
+    }
     maybeStartConnection();
     return undefined;
-  }, [active, cameraOn, localStream, partnerId, socket?.id]);
+  }, [active, cameraOn, localStream, partnerId, socket?.id, iceReady]);
 
   useEffect(() => {
     if (!socket || !active) return undefined;

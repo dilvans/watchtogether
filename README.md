@@ -127,6 +127,54 @@ CORS is enabled for all origins on the API and Socket.io server so any deployed 
 |----------|--------|-------------|
 | `PORT` | Server | HTTP port (default `3000`). Set by Render/Heroku/etc. |
 | `VITE_BACKEND_URL` | Client | Socket.io server URL. Falls back to `http://localhost:3000`. |
+| `METERED_DOMAIN` | Server | Your Metered app domain, e.g. `yourapp.metered.live` (no `https://`). |
+| `METERED_SECRET_KEY` | Server | Metered **Secret Key** from Dashboard → Developers. Never put this in the client. |
+
+---
+
+## Webcam over the internet (Metered.ca TURN)
+
+WebRTC video is peer-to-peer. On different networks you usually need a **TURN relay**. Socket.io sync still goes through Render; cameras do not.
+
+### 1. Create a Metered account
+
+1. Sign up at [metered.ca/stun-turn](https://www.metered.ca/stun-turn) (free tier available).
+2. Open the **TURN Server** dashboard.
+
+### 2. Get your server credentials
+
+1. Go to **Developers** in the Metered dashboard.
+2. Copy your **Metered Domain** (e.g. `watchtogether.metered.live`).
+3. Copy your **Secret Key** — this stays on the server only.
+
+### 3. Add env vars on Render
+
+In your Render service → **Environment**:
+
+| Key | Value |
+|-----|--------|
+| `METERED_DOMAIN` | `yourapp.metered.live` |
+| `METERED_SECRET_KEY` | paste Secret Key |
+
+Save and redeploy. The server creates short-lived TURN credentials and exposes them at `GET /api/turn-credentials`.
+
+### 4. Verify
+
+After deploy, open:
+
+```
+https://watchtogether-63ap.onrender.com/health
+```
+
+You should see `"turnConfigured": true`.
+
+Then test webcams with one person on home Wi‑Fi and one on mobile data (or different locations). Both must click **Enable camera**.
+
+### Local development
+
+Copy `server/.env.example` to `server/.env` and fill in the same two variables. Restart the server (`npm run dev`).
+
+If Metered is not configured, the app falls back to public STUN/OpenRelay servers (fine for same-network testing, unreliable across the internet).
 
 ---
 
